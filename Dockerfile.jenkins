@@ -1,0 +1,24 @@
+# Resep untuk membuat Jenkins yang punya kekuatan Docker
+
+# Mulai dari image Jenkins resmi
+FROM jenkins/jenkins:lts-jdk11
+
+# Ganti ke user root agar punya izin untuk menginstal software
+USER root
+
+# Jalankan perintah di dalam sistem operasi container untuk:
+# 1. Update daftar software
+# 2. Instal beberapa alat bantu
+# 3. Download script installer Docker
+# 4. Jalankan script itu untuk menginstal HANYA command-line tool (CLI) Docker
+RUN apt-get update && apt-get install -y lsb-release curl gnupg && \
+    curl -fsSLo /usr/share/keyrings/docker-archive-keyring.asc \
+    https://download.docker.com/linux/debian/gpg && \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.asc] \
+    https://download.docker.com/linux/debian \
+    $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && \
+    apt-get install -y docker-ce-cli
+
+# Kembalikan ke user jenkins agar lebih aman
+USER jenkins

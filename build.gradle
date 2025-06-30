@@ -1,0 +1,48 @@
+plugins {
+    id 'org.springframework.boot' version '2.7.18'
+    id 'io.spring.dependency-management' version '1.0.15.RELEASE'
+    id 'java'
+}
+
+group = 'com.leszko'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '17'
+
+repositories {
+    mavenCentral()
+}
+
+configurations {
+    flyway
+}
+
+dependencies {
+    flyway "org.flywaydb:flyway-commandline:8.5.13"
+    flyway "mysql:mysql-connector-java:8.0.28"
+
+    implementation 'com.hazelcast:hazelcast:5.0.2'
+
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'mysql:mysql-connector-java:8.0.28'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}
+
+task migrate(type: JavaExec) {
+    group = "Database"
+    description = "Runs the Flyway database migration"
+    classpath = configurations.flyway
+    mainClass = "org.flywaydb.commandline.Main"
+    args = [
+        "migrate",
+        // INI BARIS YANG DIPERBAIKI
+        "-url=jdbc:mysql://localhost:3306/calculator_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true",
+        "-user=root",
+        "-password=my-secret-pw",
+        "-locations=filesystem:src/main/resources/db/migration"
+    ]
+}
+
+test {
+    useJUnitPlatform()
+}
