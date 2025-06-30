@@ -1,27 +1,76 @@
+// Jenkinsfile - Versi Final dengan Perbaikan Izin di Setiap Tahap
+
 pipeline {
-    // Kita akan menggunakan 'agent dockerfile'. 
-    // Ini menyuruh Jenkins untuk menjalankan SEMUA tahap di dalam container
-    // yang dibuat dari Dockerfile kita.
-    agent {
-        dockerfile true
-    }
+    agent any
 
     stages {
-        stage('Build and Test inside Docker') {
+        stage('Tahap 1: Checkout Kode dari GitHub') {
             steps {
-                echo 'Sekarang kita berada di dalam container yang sudah punya Gradle dan Java 17!'
+                echo "Mengambil kode terbaru dari https://github.com/FatwaMUI/kalkulator_kulo.git"
+                git url: 'https://github.com/FatwaMUI/kalkulator_kulo.git', branch: 'main'
+            }
+        }
+
+        stage('Tahap 2: Persiapan Lingkungan') {
+            steps {
+                echo "Memberikan Izin Eksekusi pada gradlew..."
+                sh 'chmod +x gradlew'
                 
-                // Karena kita sudah di dalam container yang dibuat dari 'FROM gradle:7.6.4-jdk17',
-                // kita bisa langsung menjalankan perintah Gradle.
-                // Tidak perlu lagi install JDK di Jenkins.
-                sh './gradlew build --no-daemon'
+                echo "Membersihkan container lama..."
+                sh 'docker stop app-ci mysql-ci || true'
+                sh 'docker rm app-ci mysql-ci || true'
                 
-                echo 'Build berhasil!'
+                echo "Menjalankan gradle clean..."
+                sh './gradlew clean'
             }
         }
         
-        // Catatan: Setelah ini berhasil, Anda bisa menambahkan stage lain
-        // untuk benar-benar membuat image aplikasi final Anda,
-        // tapi untuk sekarang, tujuan kita adalah melihat 'Build and Test' ini BERHASIL.
+        stage('Tahap 3: Build Aplikasi (JAR)') {
+            steps {
+                echo "Memberikan Izin Eksekusi lagi (untuk jaga-jaga)..."
+                sh 'chmod +x gradlew'
+
+                echo "Membangun aplikasi..."
+                sh './gradlew build -x test'
+            }
+        }
+        
+        stage('Tahap 4: Build Image Docker') {
+            steps {
+                echo "Membangun image Docker..."
+                sh 'docker build -t kalkulator-ci:final .'
+            }
+        }
+        
+        // Tahap 5 tidak kita ubah karena tidak memakai gradlew
+        stage('Tahap 5: Jalankan dan Verifikasi') {
+            steps {
+                script {
+                    try {
+                        echo "Menjalankan container database..."
+                        sh 'docker run -d --name mysql-ci -p 3307:3306 -e MYSQL_ROOT_PASSWORD=my-secret-pw -e MYSQL_DATABASE=calculator_db mysql:8.0'
+                        
+                        echo "Menunggu database siap... (20 detik)"
+                        sleep 20
+                        
+                        echo "Menjalankan aplikasi dari image..."
+                        sh 'docker run -d --name app-ci -p 8080:8080 -e "SPRING_DATASOURCE_URL=jdbc:mysql://host.docker.internal:3307/calculator_db?allowPublicKeyRetrieval=true&useSSL=false" kalkulator-ci:final'
+                        
+                        echo "Menunggu aplikasi siap... (15 detik)"
+                        sleep 15
+                        
+                        echo "Verifikasi final!"
+                        sh 'docker logs app-ci'
+                        
+                    } finally {
+                        echo "Pembersihan akhir..."
+                        sh 'docker stop app-ci || true'
+                        sh 'docker rm app-ci || true'
+                        sh 'docker stop mysql-ci || true'
+                        sh 'docker rm mysql-ci || true'
+                    }
+                }
+            }
+        }
     }
 }
