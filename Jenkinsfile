@@ -1,66 +1,54 @@
-// Jenkinsfile - Versi Final dengan Perbaikan Izin di Setiap Tahap
+// Jenkinsfile - Versi Final Profesional dengan Agen Docker yang Benar
 
 pipeline {
-    agent any
+    // Kita definisikan agen secara global, tapi ini adalah agen DOCKER.
+    // Semua 'steps' akan berjalan di dalam container ini secara default.
+    agent {
+        docker {
+            image 'gradle:7.6.4-jdk17'
+            // Kita berikan remote control Docker dan jalankan sebagai root
+            args '-v /var/run/docker.sock:/var/run/docker.sock -u root' 
+        }
+    }
 
     stages {
-        stage('Tahap 1: Checkout Kode dari GitHub') {
+        
+        stage('Tahap 1: Build & Buat Docker Image') {
             steps {
-                echo "Mengambil kode terbaru dari https://github.com/FatwaMUI/kalkulator_kulo.git"
-                git url: 'https://github.com/FatwaMUI/kalkulator_kulo.git', branch: 'main'
-            }
-        }
-
-        stage('Tahap 2: Persiapan Lingkungan') {
-            steps {
-                echo "Memberikan Izin Eksekusi pada gradlew..."
-                sh 'chmod +x gradlew'
+                echo 'Berjalan di dalam container Gradle JDK 17...'
                 
-                echo "Membersihkan container lama..."
-                sh 'docker stop app-ci mysql-ci || true'
-                sh 'docker rm app-ci mysql-ci || true'
+                echo 'Langkah 1.1: Membersihkan dan Membangun Aplikasi...'
+                // Perintah ini sekarang dijalankan oleh Java 17, jadi PASTI BISA.
+                sh './gradlew clean build -x test' 
                 
-                echo "Menjalankan gradle clean..."
-                sh './gradlew clean'
+                echo 'Langkah 1.2: Membangun Image Docker...'
+                // Perintah ini juga dijalankan dari dalam container Gradle.
+                sh 'docker build -t kalkulator-kula:final .'
             }
         }
         
-        stage('Tahap 3: Build Aplikasi (JAR)') {
-            steps {
-                echo "Memberikan Izin Eksekusi lagi (untuk jaga-jaga)..."
-                sh 'chmod +x gradlew'
-
-                echo "Membangun aplikasi..."
-                sh './gradlew build -x test'
-            }
-        }
-        
-        stage('Tahap 4: Build Image Docker') {
-            steps {
-                echo "Membangun image Docker..."
-                sh 'docker build -t kalkulator-ci:final .'
-            }
-        }
-        
-        // Tahap 5 tidak kita ubah karena tidak memakai gradlew
-        stage('Tahap 5: Jalankan dan Verifikasi') {
+        stage('Tahap 2: Jalankan & Verifikasi') {
+            // Kita bisa menjalankan sisa pipeline di sini
             steps {
                 script {
                     try {
-                        echo "Menjalankan container database..."
+                        echo "Langkah 2.1: Menyiapkan Lingkungan Uji Coba..."
                         sh 'docker run -d --name mysql-ci -p 3307:3306 -e MYSQL_ROOT_PASSWORD=my-secret-pw -e MYSQL_DATABASE=calculator_db mysql:8.0'
                         
                         echo "Menunggu database siap... (20 detik)"
                         sleep 20
                         
-                        echo "Menjalankan aplikasi dari image..."
-                        sh 'docker run -d --name app-ci -p 8080:8080 -e "SPRING_DATASOURCE_URL=jdbc:mysql://host.docker.internal:3307/calculator_db?allowPublicKeyRetrieval=true&useSSL=false" kalkulator-ci:final'
+                        echo "Langkah 2.2: Menjalankan Aplikasi dari Image yang Baru Dibuat..."
+                        // Kita pakai host.docker.internal karena Jenkins sekarang berkomunikasi
+                        // dari dalam sebuah container.
+                        sh 'docker run -d --name app-ci -p 8080:8080 -e "SPRING_DATASOURCE_URL=jdbc:mysql://host.docker.internal:3307/calculator_db?allowPublicKeyRetrieval=true&useSSL=false" kalkulator-kula:final'
                         
                         echo "Menunggu aplikasi siap... (15 detik)"
                         sleep 15
                         
-                        echo "Verifikasi final!"
-                        sh 'docker logs app-ci'
+                        echo "Langkah 2.3: Verifikasi Akhir!"
+                        // Kita bisa tes langsung karena Jenkins punya akses ke docker.sock
+                        sh "docker exec app-ci curl -s --fail http://localhost:8080/add?a=1&b=1"
                         
                     } finally {
                         echo "Pembersihan akhir..."
