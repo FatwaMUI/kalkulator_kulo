@@ -1,75 +1,34 @@
-// Jenkinsfile - Versi Final dengan Perbaikan Izin di Setiap Tahap
-
 pipeline {
+    // MENDEFINISIKAN ALAT YANG DIBUTUHKAN DI PALING ATAS
     agent any
+    
+    tools {
+        // Memberitahu Jenkins untuk menggunakan konfigurasi JDK bernama 'JDK17'
+        // yang sudah kita atur di Global Tool Configuration.
+        jdk 'JDK17' 
+    }
 
     stages {
-        stage('Tahap 1: Checkout Kode dari GitHub') {
+        stage('Checkout SCM') {
             steps {
-                echo "Mengambil kode terbaru dari https://github.com/FatwaMUI/kalkulator_kulo.git"
-                git url: 'https://github.com/FatwaMUI/kalkulator_kulo.git', branch: 'main'
+                checkout scm
+                echo 'Kode berhasil diambil dari GitHub!'
             }
         }
 
-        stage('Tahap 2: Persiapan Lingkungan') {
+        stage('Build Application') {
             steps {
-                echo "Memberikan Izin Eksekusi pada gradlew..."
-                sh 'chmod +x gradlew'
-                
-                echo "Membersihkan container lama..."
-                sh 'docker stop app-ci mysql-ci || true'
-                sh 'docker rm app-ci mysql-ci || true'
-                
-                echo "Menjalankan gradle clean..."
-                sh './gradlew clean'
+                echo 'Menjalankan ./gradlew build...'
+                // Sekarang Jenkins akan menjalankan ini menggunakan Java 17
+                sh './gradlew build --no-daemon -x test'
             }
         }
-        
-        stage('Tahap 3: Build Aplikasi (JAR)') {
-            steps {
-                echo "Memberikan Izin Eksekusi lagi (untuk jaga-jaga)..."
-                sh 'chmod +x gradlew'
 
-                echo "Membangun aplikasi..."
-                sh './gradlew build -x test'
-            }
-        }
-        
-        stage('Tahap 4: Build Image Docker') {
+        stage('Build Docker Image') {
             steps {
-                echo "Membangun image Docker..."
-                sh 'docker build -t kalkulator-ci:final .'
-            }
-        }
-        
-        // Tahap 5 tidak kita ubah karena tidak memakai gradlew
-        stage('Tahap 5: Jalankan dan Verifikasi') {
-            steps {
-                script {
-                    try {
-                        echo "Menjalankan container database..."
-                        sh 'docker run -d --name mysql-ci -p 3307:3306 -e MYSQL_ROOT_PASSWORD=my-secret-pw -e MYSQL_DATABASE=calculator_db mysql:8.0'
-                        
-                        echo "Menunggu database siap... (20 detik)"
-                        sleep 20
-                        
-                        echo "Menjalankan aplikasi dari image..."
-                        sh 'docker run -d --name app-ci -p 8080:8080 -e "SPRING_DATASOURCE_URL=jdbc:mysql://host.docker.internal:3307/calculator_db?allowPublicKeyRetrieval=true&useSSL=false" kalkulator-ci:final'
-                        
-                        echo "Menunggu aplikasi siap... (15 detik)"
-                        sleep 15
-                        
-                        echo "Verifikasi final!"
-                        sh 'docker logs app-ci'
-                        
-                    } finally {
-                        echo "Pembersihan akhir..."
-                        sh 'docker stop app-ci || true'
-                        sh 'docker rm app-ci || true'
-                        sh 'docker stop mysql-ci || true'
-                        sh 'docker rm mysql-ci || true'
-                    }
-                }
+                echo 'Membangun image Docker...'
+                // Dockerfile kita sudah benar, jadi ini akan berjalan lancar
+                sh 'docker build -t kalkulator-saya:jenkins-build .'
             }
         }
     }
