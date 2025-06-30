@@ -1,4 +1,4 @@
-// Jenkinsfile - Versi Profesional untuk Docker-in-Docker
+// Jenkinsfile - Versi Profesional dengan Tag Image Statis v1
 
 pipeline {
     // Jalankan di agent manapun yang terhubung
@@ -7,7 +7,7 @@ pipeline {
     // Definisikan variabel di satu tempat
     environment {
         DOCKER_IMAGE_NAME = "kalkulator-kula"
-        DOCKER_IMAGE_TAG  = "${env.BUILD_NUMBER}"
+        DOCKER_IMAGE_TAG  = "v1" // <-- PERUBAHAN DI SINI
         // Nama network untuk isolasi build ini
         DOCKER_NETWORK    = "kalkulator-net"
     }
@@ -34,6 +34,7 @@ pipeline {
         
         stage('Tahap 3: Build Docker Image') {
             steps {
+                // Sekarang akan selalu membuat image kalkulator-kula:v1
                 echo "Membangun image Docker: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                 sh "docker build -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} ."
             }
@@ -58,19 +59,14 @@ pipeline {
                         sh 'docker run -d --name mysql-db --network ${DOCKER_NETWORK} -e MYSQL_ROOT_PASSWORD=my-secret-pw -e MYSQL_DATABASE=calculator_db mysql:8.0'
                         
                         echo "Menjalankan aplikasi di network: ${DOCKER_NETWORK}..."
-                        // PERUBAHAN PENTING:
-                        // 1. Gunakan --network
-                        // 2. Hubungkan ke 'mysql-db:3306'. Tidak perlu 'host.docker.internal' dan mapping port 3307 lagi.
+                        // Akan menjalankan container dari image kalkulator-kula:v1
                         sh 'docker run -d --name app-kalkulator --network ${DOCKER_NETWORK} -p 8080:8080 -e "SPRING_DATASOURCE_URL=jdbc:mysql://mysql-db:3306/calculator_db?allowPublicKeyRetrieval=true&useSSL=false" ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}'
                         
                         echo "Menunggu aplikasi siap (health check)..."
-                        // PERUBAHAN PENTING:
                         // Gunakan fitur 'retry' dari Jenkins, lebih bersih daripada script 'timeout'.
-                        // Cek ke http://localhost:8080 karena port 8080 di-mapping ke host Jenkins.
                         retry(count: 15) { // Coba 15 kali
                             sh 'sleep 4' // Jeda 4 detik antar percobaan
                             echo "Mencoba cek health aplikasi..."
-                            // Curl dari dalam Jenkins Container ke port yang dipublish di host.
                             sh 'curl --fail --silent http://localhost:8080/actuator/health'
                         }
                         
